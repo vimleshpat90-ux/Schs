@@ -1,0 +1,169 @@
+<!doctype html><html lang="hi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>मेडिसिन स्कैनर</title><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#2c3e50"><link rel="icon" href="icon-192.png">
+<style>
+*{box-sizing:border-box}body{margin:0;font:16px system-ui,sans-serif;background:#f4f6f8;color:#222}
+.wrap{max-width:620px;margin:auto;padding:12px}h1{font-size:22px;margin:6px 0 10px}
+h2{font-size:18px;margin:18px 0 6px}label,.lab,.cap{display:block;font-weight:600;margin:10px 0 4px}
+input,select{width:100%;padding:11px;border:1px solid #ccc;border-radius:8px;font-size:16px;background:#fff}
+button{padding:11px 14px;border:0;border-radius:8px;background:#e1e6ea;font-size:15px;cursor:pointer}
+button.p{background:#2980b9;color:#fff;width:100%;margin-top:12px;font-size:17px}
+button.r{background:#c0392b;color:#fff}button.v{background:#9b59b6;color:#fff}button:disabled{opacity:.5}
+.row{display:flex;gap:8px}.row>input{flex:1}.seg{display:flex;margin:10px 0}
+.seg button{flex:1;border-radius:0;background:#dfe5ea}.seg button:first-child{border-radius:8px 0 0 8px}
+.seg button:last-child{border-radius:0 8px 8px 0}.seg .on{background:#2c3e50;color:#fff}
+.hint{color:#666;font-size:14px;margin-top:4px}.card{background:#fff;border-radius:10px;padding:10px 12px;margin:8px 0}
+.chips{margin-top:6px}.chip{display:inline-block;background:#e8eef3;border-radius:14px;padding:4px 10px;margin:3px 4px 0 0;font-size:14px}
+.chip b{cursor:pointer;margin-left:6px}.slot img{max-width:100%;max-height:160px;margin-top:8px;border-radius:8px}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px;background:#fff}
+th{background:#2c3e50;color:#fff;text-align:left}td,th{padding:8px;border:1px solid #ddd}
+td button{padding:6px 9px;background:#e74c3c;color:#fff}
+.ok{color:#1e8449}.err{color:#c0392b}.btns{display:flex;gap:8px;margin:12px 0 30px}.btns button{flex:1}
+</style></head><body><div class="wrap">
+<h1>💊 मेडिसिन स्कैनर</h1>
+<div id="keybox"></div>
+<div class="seg"><button id="mSend" class="on" onclick="setMode('send')">भेजें</button>
+<button id="mRecv" onclick="setMode('recv')">प्राप्त</button></div>
+<div id="move" class="card"></div>
+<details><summary>✏️ नाम जोड़ें / हटाएँ</summary><div id="names" class="card"></div></details>
+
+<h2>📷 इमेज</h2>
+<div class="card slot"><div class="cap">फोटो 1 (आगे)</div>
+<div class="row"><button onclick="pick(0,'cam')">📷 कैमरा</button><button onclick="pick(0,'gal')">🖼️ गैलरी</button></div>
+<img id="pv0" hidden><div><button id="rm0" hidden onclick="clearImg(0)">✕ हटाएँ</button></div></div>
+<div class="card slot"><div class="cap">फोटो 2 (पीछे, वैकल्पिक)</div>
+<div class="row"><button onclick="pick(1,'cam')">📷 कैमरा</button><button onclick="pick(1,'gal')">🖼️ गैलरी</button></div>
+<img id="pv1" hidden><div><button id="rm1" hidden onclick="clearImg(1)">✕ हटाएँ</button></div></div>
+<input type="file" id="cam0" accept="image/*" capture="environment" hidden>
+<input type="file" id="gal0" accept="image/*" hidden>
+<input type="file" id="cam1" accept="image/*" capture="environment" hidden>
+<input type="file" id="gal1" accept="image/*" hidden>
+<button class="p" id="scanBtn" disabled>🔍 स्कैन करें</button>
+<div id="msg" class="hint"></div>
+
+<h2>📝 जानकारी (एडिट करें)</h2><div class="card">
+<label>मेडिसिन नेम</label><input id="f_name">
+<label>मेडिसिन बैच नंबर</label><input id="f_batch">
+<label>मेडिसिन एक्सपायरी (MM/YYYY)</label><input id="f_expiry">
+<label>मेडिसिन क्वांटिटी (जैसे 10×10 या 10×10ml)</label><input id="f_qty">
+<label>📦 कितने बॉक्स हैं</label><input id="f_boxes" type="number" min="1" value="1">
+<div class="hint" id="calc"></div>
+<button class="p" onclick="addItem()">➕ सूची में जोड़ें (Add to List)</button></div>
+
+<h2>📋 जोड़ी गई दवाइयां (A-Z)</h2>
+<div class="tw" id="table"></div>
+<div class="btns"><button class="r" onclick="clearAll()">🗑️ पूरी लिस्ट साफ़ करें</button>
+<button class="v" onclick="getPdf()">📥 पीडीएफ डाउनलोड करें</button></div>
+</div>
+<script>
+const $=s=>document.querySelector(s), val=id=>(document.getElementById(id)||{}).value||'';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let S={mode:'send',has_key:false,items:[],places:[],sources:[],sel:{mA:'',mB:''}}, imgs=[null,null], editKey=false;
+const MODELS=['gemini-3.5-flash','gemini-3.1-flash-lite','gemini-2.5-flash','gemini-2.5-flash-lite','gemini-2.0-flash','gemini-2.0-flash-lite'],GURL=m=>'https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent';
+const PROMPT=`You are reading photos of ONE medicine package (front and/or back).
+Return ONLY JSON: {"name": "brand/generic name with strength and form as printed",
+"batch": "batch number (B.No / Batch No / Lot)", "expiry": "expiry as MM/YYYY",
+"quantity": "pack size as printed, ALWAYS keeping the unit if printed, e.g. 10x10 (tablets), 10x10ml, 10x15gm, 1x1000mg, 100ml"}.
+Use "" for anything not clearly visible. Never guess.`;
+function D(){let d={};try{d=JSON.parse(localStorage.getItem('medscan_data'))||{}}catch(e){}
+  d.items=d.items||[];d.places=d.places||[];d.sources=d.sources||[];return d}
+const saveD=d=>localStorage.setItem('medscan_data',JSON.stringify(d));
+async function api(p,j={}){
+  const d=D();
+  if(p=='/api/key'){const k=(j.key||'').trim();if(!k)return{error:'Key खाली है'};localStorage.setItem('medscan_key',k);return{ok:1}}
+  if(p=='/api/names'){const l=j.list;if(j.action=='add'){const n=(j.name||'').trim();if(n&&!d[l].includes(n))d[l].push(n)}else d[l].splice(j.index,1);saveD(d);return{ok:1}}
+  if(p=='/api/add'){
+    const name=(j.name||'').trim(),batch=(j.batch||'').trim(),per=qv(j.qty),boxes=Math.max(1,parseInt(j.boxes)||1);
+    if(!name||per==0)return{error:'नाम और क्वांटिटी ज़रूरी है'};
+    const tot=per*boxes,it=d.items.find(i=>i.name.toLowerCase()==name.toLowerCase()&&i.batch.toUpperCase()==batch.toUpperCase());
+    if(it){it.total+=tot;it.boxes+=boxes}else d.items.push({name,batch,expiry:(j.expiry||'').trim(),qty:(j.qty||'').trim(),boxes,total:tot});
+    saveD(d);return{ok:1}}
+  if(p=='/api/delete'){d.items=d.items.filter(i=>!(i.name==j.name&&i.batch==j.batch));saveD(d);return{ok:1}}
+  if(p=='/api/clear'){d.items=[];saveD(d);return{ok:1}}
+  if(p=='/api/scan'){
+    const key=localStorage.getItem('medscan_key');if(!key)return{error:'पहले API Key सेव करें'};
+    const parts=[{text:PROMPT},...j.images.slice(0,2).map(b=>({inline_data:{mime_type:'image/jpeg',data:b}}))];
+    try{
+      let r,used='';for(const m of MODELS){used=m;r=await fetch(GURL(m),{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
+        body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:'application/json'}})});
+        if(r.ok||![429,404,500,503].includes(r.status))break}
+      if(!r.ok)return{error:'Gemini error '+r.status+': '+(await r.text()).slice(0,200)};
+      const o=await r.json(),t=o.candidates[0].content.parts.map(x=>x.text||'').join('').trim().replace(/^```(?:json)?|```$/g,'').trim(),x=JSON.parse(t);
+      return{name:String(x.name||''),batch:String(x.batch||''),expiry:String(x.expiry||''),qty:String(x.quantity||''),model:used}
+    }catch(e){return{error:'स्कैन नहीं हुआ: '+e}}}
+  return{error:'bad request'}}
+async function refresh(){const d=D();S.has_key=!!localStorage.getItem('medscan_key');
+  S.items=d.items.slice().sort((a,b)=>a.name.toLowerCase()<b.name.toLowerCase()?-1:1);S.places=d.places;S.sources=d.sources;
+  renderKey();renderMove();renderNames();renderTable()}
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+
+function msg(t,c){const m=$('#msg');m.textContent=t;m.className='hint '+(c||'')}
+
+function renderKey(){
+  $('#keybox').innerHTML = (S.has_key&&!editKey)
+   ? `<div class="row"><input type="password" value="••••••••••••••••" disabled><button onclick="editKey=true;renderKey()">🔑 बदलें</button></div><div class="hint">Key सेव है ✓</div>`
+   : `<div class="row"><input type="password" id="keyIn" placeholder="Gemini API Key यहाँ डालें" autocomplete="off"><button onclick="saveKey()">💾 सेव</button></div>`;
+}
+async function saveKey(){const k=val('keyIn').trim();if(!k)return;const r=await api('/api/key',{key:k});
+  if(r.error){msg(r.error,'err');return}editKey=false;await refresh();msg('Key सेव हो गई ✓','ok')}
+
+function setMode(m){keepSel();S.mode=m;$('#mSend').className=m=='send'?'on':'';$('#mRecv').className=m=='recv'?'on':'';renderMove()}
+function keepSel(){S.sel.mA=val('mA')||S.sel.mA;S.sel.mB=val('mB')||S.sel.mB}
+function sel(id,list,label){
+  if(!list.length)return `<label>${label}</label><div class="hint">सूची खाली है, नीचे 'नाम जोड़ें' से जोड़ें</div>`;
+  return `<label>${label}</label><select id="${id}">${list.map(x=>`<option ${x===S.sel[id]?'selected':''}>${esc(x)}</option>`).join('')}</select>`}
+function renderMove(){keepSel();
+  $('#move').innerHTML = S.mode=='recv'
+   ? `<b>📥 प्राप्त</b>`+sel('mA',S.places,'कहाँ आई है')+sel('mB',S.sources,'कहाँ से आई है')
+   : `<b>📤 भेजें</b>`+sel('mA',S.places,'कहाँ से भेजी')+`<label>कहाँ भेज रहे हैं</label><input id="mB" value="${esc(S.sel.mB)}">`}
+function renderNames(){
+  $('#names').innerHTML=[['places','जगह (कहाँ आई / कहाँ से भेजी)'],['sources','स्रोत (कहाँ से आई)']].map(([k,l])=>
+   `<div class="lab">${l}</div><div class="row"><input id="new_${k}" placeholder="नाम लिखें"><button onclick="addName('${k}')">जोड़ें</button></div>
+    <div class="chips">${S[k].map((x,i)=>`<span class="chip">${esc(x)}<b onclick="remName('${k}',${i})">✕</b></span>`).join('')}</div>`).join('')}
+async function addName(k){const n=val('new_'+k).trim();if(!n)return;await api('/api/names',{list:k,name:n,action:'add'});await refresh()}
+async function remName(k,i){await api('/api/names',{list:k,index:i,action:'remove'});await refresh()}
+
+function pick(i,t){document.getElementById(t+i).click()}
+function loadImg(f){return new Promise(res=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
+  const s=Math.min(1,1600/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;
+  c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.85))};im.src=r.result};r.readAsDataURL(f)})}
+[0,1].forEach(i=>['cam','gal'].forEach(t=>document.getElementById(t+i).onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;imgs[i]=await loadImg(f);e.target.value='';showImgs()}));
+function clearImg(i){imgs[i]=null;showImgs()}
+function showImgs(){[0,1].forEach(i=>{const p=$('#pv'+i);p.hidden=!imgs[i];if(imgs[i])p.src=imgs[i];$('#rm'+i).hidden=!imgs[i]});
+  $('#scanBtn').disabled=!imgs.some(Boolean)}
+$('#scanBtn').onclick=async()=>{const l=imgs.filter(Boolean);if(!l.length)return;
+  $('#scanBtn').disabled=true;msg('स्कैन हो रहा है...');
+  const r=await api('/api/scan',{images:l.map(d=>d.split(',')[1])});$('#scanBtn').disabled=false;
+  if(r.error){msg(r.error,'err');return}
+  $('#f_name').value=r.name;$('#f_batch').value=r.batch;$('#f_expiry').value=r.expiry;$('#f_qty').value=r.qty;calc();
+  msg('स्कैन पूरा ✓ ('+r.model+') नीचे जाँचकर सुधारें','ok')};
+
+const MEAS=new Set(['ml','l','ltr','cc','gm','g','gram','grams','mg','mcg','kg','iu']);
+function qv(s){const t=[...(s||'').matchAll(/(\d+)\s*([a-zA-Z]*)/g)];
+  const n=t.filter(m=>!MEAS.has(m[2].toLowerCase())).map(m=>parseInt(m[1]));
+  return n.length?n.reduce((a,b)=>a*b,1):(t.length?1:0)}
+function calc(){const b=Math.max(1,parseInt(val('f_boxes'))||1),p=qv(val('f_qty'));$('#calc').textContent=`कुल = ${b} × ${p} = ${b*p}`}
+['f_qty','f_boxes'].forEach(id=>document.getElementById(id).oninput=calc);
+async function addItem(){
+  const r=await api('/api/add',{name:val('f_name'),batch:val('f_batch'),expiry:val('f_expiry'),qty:val('f_qty'),boxes:val('f_boxes')});
+  if(r.error){msg(r.error,'err');return}
+  ['f_name','f_batch','f_expiry','f_qty'].forEach(i=>document.getElementById(i).value='');
+  $('#f_boxes').value=1;calc();imgs=[null,null];showImgs();msg('सूची में जुड़ गया ✓','ok');await refresh()}
+
+function renderTable(){
+  $('#table').innerHTML=S.items.length?`<table><tr><th>नाम</th><th>बैच</th><th>एक्सपायरी</th><th>क्वांटिटी</th><th>टोटल</th><th></th></tr>`+
+   S.items.map((it,i)=>`<tr><td>${esc(it.name)}</td><td>${esc(it.batch)}</td><td>${esc(it.expiry)}</td><td>${esc(it.qty)}</td><td><b>${it.total}</b></td><td><button onclick="delItem(${i})">🗑️</button></td></tr>`).join('')+`</table>`
+   :`<div class="hint">अभी कोई दवा नहीं जोड़ी गई।</div>`}
+async function delItem(i){const it=S.items[i];if(!confirm('यह एंट्री हटाएँ?'))return;await api('/api/delete',{name:it.name,batch:it.batch});await refresh()}
+async function clearAll(){if(!S.items.length||!confirm('पूरी लिस्ट साफ़ करें?'))return;await api('/api/clear');await refresh()}
+function getPdf(){if(!S.items.length){msg('लिस्ट खाली है','err');return}keepSel();
+  const a=val('mA'),b=val('mB');
+  const q=S.mode=='recv'?{mode:'RECEIVED',a:'At: '+a,b:'From: '+b}:{mode:'SENT',a:'From: '+a,b:'To: '+b};
+  printReport(q)}
+function printReport(q){const w=window.open('','_blank');if(!w){msg('पॉप-अप की अनुमति दें','err');return}
+  const rows=S.items.map((it,i)=>`<tr><td>${i+1}</td><td>${esc(it.name)}</td><td>${esc(it.batch)}</td><td>${esc(it.expiry)}</td><td>${esc(it.qty)}</td><td>${it.boxes}</td><td>${it.total}</td></tr>`).join('');
+  w.document.write(`<html><head><meta charset="utf-8"><title>medicines_${new Date().toISOString().slice(0,10)}</title><style>body{font:14px sans-serif;margin:16px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #888;padding:6px;text-align:left}th{background:#2c3e50;color:#fff}</style></head><body><h2>Medicine List</h2><p>${esc(q.mode+' | '+q.a+' | '+q.b)} | ${new Date().toLocaleDateString('en-GB')}</p><table><tr><th>#</th><th>Medicine</th><th>Batch</th><th>Expiry</th><th>Qty</th><th>Boxes</th><th>Total</th></tr>${rows}</table></body></html>`);
+  w.document.close();w.focus();setTimeout(()=>w.print(),400)}
+calc();refresh();
+</script></body></html>
