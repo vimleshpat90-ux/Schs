@@ -1,0 +1,19 @@
+{
+  "name": "Creator Studio Pro (IG • FB • YT)",
+  "short_name": "Creator Studio",
+  "description": "Multi-Channel Analytics for Instagram, Facebook and YouTube",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1016",
+  "theme_color": "#14151f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
