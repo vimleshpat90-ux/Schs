@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Channel Creator Studio</title>
+    
+    <!-- PWA & App Icon Links -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <meta name="theme-color" content="#14151f">
+
+    <!-- Tailwind CSS & Chart.js -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0f1016; color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; }
+        .phone-scroll-container {
+            display: flex;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            gap: 16px;
+            padding-bottom: 16px;
+        }
+        .phone-screen {
+            flex: 0 0 92%;
+            scroll-snap-align: center;
+            background: #181924;
+            border: 2px solid #2e3047;
+            border-radius: 24px;
+            padding: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        @media (min-width: 1024px) {
+            .phone-screen { flex: 0 0 32%; }
+        }
+        .metric-box {
+            background: linear-gradient(135deg, #232538 0%, #1a1c29 100%);
+            border: 1px solid #343752;
+            border-radius: 14px;
+            padding: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-12">
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-30 bg-[#14151f]/95 backdrop-blur border-b border-gray-800 px-4 py-3 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <img src="icon.svg" alt="Logo" class="w-8 h-8 rounded-lg" onerror="this.style.display='none'">
+            <div>
+                <h1 class="font-bold text-lg leading-tight">Creator Studio Pro</h1>
+                <p class="text-xs text-gray-400">IG • FB • YT Multi-Channel</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1 text-xs bg-gray-800 px-2.5 py-1.5 rounded-lg cursor-pointer">
+                <input type="checkbox" id="demoToggle" checked onchange="toggleDemoMode()" class="accent-blue-500">
+                <span>Demo</span>
+            </label>
+            <button onclick="toggleSettings()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-xl text-sm font-medium flex items-center gap-1 shadow">
+                ⚙️ Settings
+            </button>
+        </div>
+    </header>
+
+    <!-- Mode Switcher Tabs -->
+    <div class="px-4 pt-3 flex gap-2 overflow-x-auto">
+        <button onclick="switchTab('swipe')" id="tab-swipe" class="tab-btn bg-indigo-600 text-white px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap">📱 3-Phone Scroll (IG ➔ FB ➔ YT)</button>
+        <button onclick="switchTab('Instagram')" id="tab-Instagram" class="tab-btn bg-gray-800 text-gray-300 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap">📸 Instagram</button>
+        <button onclick="switchTab('Facebook')" id="tab-Facebook" class="tab-btn bg-gray-800 text-gray-300 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap">📘 Facebook</button>
+        <button onclick="switchTab('YouTube')" id="tab-YouTube" class="tab-btn bg-gray-800 text-gray-300 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap">▶️ YouTube</button>
+        <button onclick="switchTab('compare')" id="tab-compare" class="tab-btn bg-emerald-700 text-white px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap">⚖️ कंबाइन तुलना (Compare All)</button>
+    </div>
+
+    <!-- ⚙️ SETTINGS DRAWER (Multi-Account API Manager) -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/80 z-50 hidden flex justify-end">
+        <div class="bg-[#181924] w-full max-w-md h-full overflow-y-auto p-5 border-l border-gray-700">
+            <div class="flex justify-between items-center pb-3 border-b border-gray-700">
+                <h2 class="text-lg font-bold">⚙️ Multi-API अकाउंट सेटिंग्स</h2>
+                <button onclick="toggleSettings()" class="text-gray-400 hover:text-white text-xl">✖</button>
+            </div>
+            <p class="text-xs text-gray-400 mt-2 mb-4">यहाँ आप पुरानी API हटाए बिना <b>➕ Add</b> बटन से एक से ज़्यादा चैनल्स और पेज जोड़ सकते हैं।</p>
+            <div id="apiManagerContainer" class="space-y-6"></div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="p-4">
+        <div id="studioScreensContainer" class="phone-scroll-container"></div>
+
+        <!-- Combined Comparison View -->
+        <div id="compareContainer" class="hidden space-y-6">
+            <div class="bg-[#181924] border border-gray-800 rounded-2xl p-4">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+                    <h2 class="text-lg font-bold text-emerald-400">⚖️ सभी प्लेटफॉर्म्स और चैनल्स की तुलना</h2>
+                    <select id="compareGroupBy" onchange="renderComparison()" class="bg-gray-800 text-xs rounded-lg px-3 py-2 border border-gray-700">
+                        <option value="Platform">🌐 प्लेटफॉर्म के अनुसार (IG vs FB vs YT)</option>
+                        <option value="Account">📺 अलग-अलग चैनल के अनुसार (Channel 1 vs Channel 2)</option>
+                    </select>
+                </div>
+
+                <div id="winnerBanner" class="bg-emerald-950/60 border border-emerald-700 text-emerald-200 px-4 py-2.5 rounded-xl text-sm mb-4 font-medium"></div>
+
+                <h3 class="text-sm font-semibold mb-2 text-gray-300">📅 इस महीने का कुल प्रदर्शन (Monthly Totals):</h3>
+                <div class="overflow-x-auto mb-6">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="border-b border-gray-700 text-gray-400">
+                                <th class="py-2 px-3">नाम (Platform/Channel)</th>
+                                <th class="py-2 px-3">कुल Views 👁️</th>
+                                <th class="py-2 px-3">कुल Likes ❤️</th>
+                                <th class="py-2 px-3">Comments 💬</th>
+                            </tr>
+                        </thead>
+                        <tbody id="compareSummaryBody" class="divide-y divide-gray-800"></tbody>
+                    </table>
+                </div>
+
+                <div class="h-64 mb-6">
+                    <canvas id="compareChartCanvas"></canvas>
+                </div>
+
+                <h3 class="text-sm font-semibold mb-2 text-gray-300">📈 किस दिन किसमें सबसे ज़्यादा Views आए? (Daily Winner):</h3>
+                <div class="overflow-x-auto max-h-80">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead id="dailyWinnerHead" class="border-b border-gray-700 text-gray-400 sticky top-0 bg-[#181924]"></thead>
+                        <tbody id="dailyWinnerBody" class="divide-y divide-gray-800"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+<script>
+const STORAGE_KEY = "multi_creator_studio_v1";
+let appState = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
+    useDemo: true,
+    accounts: { Instagram: [], Facebook: [], YouTube: [] }
+};
+
+let allVideosData = [];
+let activeTab = 'swipe';
+let chartInstances = {};
+
+function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+}
+
+function toggleSettings() {
+    const modal = document.getElementById('settingsModal');
+    modal.classList.toggle('hidden');
+    if (!modal.classList.contains('hidden')) renderSettingsDrawer();
+}
+
+function toggleDemoMode() {
+    appState.useDemo = document.getElementById('demoToggle').checked;
+    saveState();
+    loadAllData();
+}
+
+function renderSettingsDrawer() {
+    const container = document.getElementById('apiManagerContainer');
+    const platforms = [
+        { name: 'Instagram', icon: '📸', color: 'text-pink-500', idLabel: 'IG Business Account ID', keyLabel: 'Instagram Access Token' },
+        { name: 'Facebook', icon: '📘', color: 'text-blue-500', idLabel: 'FB Page ID', keyLabel: 'FB Page Access Token' },
+        { name: 'YouTube', icon: '▶️', color: 'text-red-500', idLabel: 'YouTube Channel ID', keyLabel: 'YouTube Data API v3 Key' }
+    ];
+
+    container.innerHTML = platforms.map(p => {
+        const savedList = appState.accounts[p.name] || [];
+        const savedHtml = savedList.length > 0
+            ? savedList.map((acc, i) => `
+                <div class="flex justify-between items-center bg-gray-800/80 px-3 py-2 rounded-lg border-l-4 border-indigo-500 text-xs mb-2">
+                    <div>
+                        <div class="font-bold text-white">${acc.name}</div>
+                        <div class="text-gray-400">ID: ${acc.id.substring(0, 12)}...</div>
+                    </div>
+                    <button onclick="deleteAccount('${p.name}', ${i})" class="text-red-400 hover:text-red-300 px-2 py-1">🗑️</button>
+                </div>
+            `).join('')
+            : `<div class="text-xs text-gray-500 italic mb-2">कोई ${p.name} चैनल सेव नहीं है।</div>`;
+
+        return `
+        <div class="bg-gray-900/90 p-3.5 rounded-xl border border-gray-800">
+            <h3 class="font-bold text-sm ${p.color} mb-2">${p.icon} ${p.name} चैनल्स (${savedList.length} जुड़े हैं)</h3>
+            ${savedHtml}
+            <div class="mt-3 pt-2 border-t border-gray-800 space-y-2">
+                <div class="text-xs font-semibold text-gray-300">➕ नया ${p.name} चैनल/पेज जोड़ें:</div>
+                <input id="name_${p.name}" type="text" placeholder="चैनल का नाम (जैसे: ${p.name} Channel 2)" class="w-full bg-gray-800 text-xs px-3 py-2 rounded-lg border border-gray-700">
+                <input id="id_${p.name}" type="text" placeholder="${p.idLabel}" class="w-full bg-gray-800 text-xs px-3 py-2 rounded-lg border border-gray-700">
+                <input id="key_${p.name}" type="password" placeholder="${p.keyLabel}" class="w-full bg-gray-800 text-xs px-3 py-2 rounded-lg border border-gray-700">
+                <button onclick="addAccount('${p.name}')" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 rounded-lg">
+                    ➕ ${p.name} में दूसरा चैनल ऐड और सेव करें
+                </button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function addAccount(platform) {
+    const name = document.getElementById(`name_${platform}`).value.trim();
+    const id = document.getElementById(`id_${platform}`).value.trim();
+    const key = document.getElementById(`key_${platform}`).value.trim();
+
+    if (!name || !id || !key) {
+        alert("कृपया चैनल का नाम, ID और API Key तीनों भरें!");
+        return;
+    }
+    appState.accounts[platform].push({ name, id, key });
+    saveState();
+    renderSettingsDrawer();
+    loadAllData();
+}
+
+function deleteAccount(platform, index) {
+    appState.accounts[platform].splice(index, 1);
+    saveState();
+    renderSettingsDrawer();
+    loadAllData();
+}
+
+async function loadAllData() {
+    document.getElementById('demoToggle').checked = appState.useDemo;
+    allVideosData = [];
+
+    if (appState.useDemo) {
+        generateDemoData();
+    } else {
+        for (const acc of appState.accounts.YouTube) await fetchYouTube(acc);
+        for (const acc of appState.accounts.Instagram) await fetchInstagram(acc);
+        for (const acc of appState.accounts.Facebook) await fetchFacebook(acc);
+    }
+    renderActiveView();
+}
+
+function generateDemoData() {
+    const demoChannels = {
+        Instagram: ['IG Page 1 (Main)', 'IG Page 2 (Reels)'],
+        Facebook: ['FB Page 1 (Official)', 'FB Page 2 (Gaming)'],
+        YouTube: ['YT Channel 1 (Vlogs)', 'YT Channel 2 (Shorts)']
+    };
+    const today = new Date();
+    for (const [platform, channels] of Object.entries(demoChannels)) {
+        channels.forEach((accName, cIdx) => {
+            for (let i = 0; i < 10; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() - i);
+                const dateStr = d.toISOString().slice(0, 10);
+                const seed = (platform.length * 100) + (cIdx * 50) + (i * 17);
+                const views = Math.floor(1500 + ((seed * 9301 + 49297) % 35000));
+                const likes = Math.floor(views * 0.08);
+                const comments = Math.floor(likes * 0.12);
+
+                allVideosData.push({
+                    Platform: platform,
+                    Account: accName,
+                    Title: `[${accName}] Viral Video #${10 - i}`,
+                    Date: dateStr,
+                    Views: views,
+                    Likes: likes,
+                    Comments: comments
+                });
+            }
+        });
+    }
+}
+
+async function fetchYouTube(acc) {
+    try {
+        const sUrl = `https://www.googleapis.com/youtube/v3/search?key=${acc.key}&channelId=${acc.id}&part=snippet,id&order=date&maxResults=12&type=video`;
+        const sRes = await fetch(sUrl).then(r => r.json());
+        const ids = (sRes.items || []).map(x => x.id.videoId).filter(Boolean).join(',');
+        if (!ids) return;
+        const vUrl = `https://www.googleapis.com/youtube/v3/videos?key=${acc.key}&id=${ids}&part=snippet,statistics`;
+        const vRes = await fetch(vUrl).then(r => r.json());
+        (vRes.items || []).forEach(item => {
+            allVideosData.push({
+                Platform: 'YouTube',
+                Account: acc.name,
+                Title: item.snippet.title.substring(0, 40),
+                Date: item.snippet.publishedAt.slice(0, 10),
+                Views: parseInt(item.statistics.viewCount || 0),
+                Likes: parseInt(item.statistics.likeCount || 0),
+                Comments: parseInt(item.statistics.commentCount || 0)
+            });
+        });
+    } catch (e) { console.error("YT Error:", e); }
+}
+
+async function fetchInstagram(acc) {
+    try {
+        const url = `https://graph.facebook.com/v21.0/${acc.id}/media?fields=id,caption,timestamp,like_count,comments_count&limit=12&access_token=${acc.key}`;
+        const res = await fetch(url).then(r => r.json());
+        (res.data || []).forEach(item => {
+            allVideosData.push({
+                Platform: 'Instagram',
+                Account: acc.name,
+                Title: (item.caption || 'IG Reel').substring(0, 40),
+                Date: item.timestamp.slice(0, 10),
+                Views: (item.like_count || 10) * 12,
+                Likes: item.like_count || 0,
+                Comments: item.comments_count || 0
+            });
+        });
+    } catch (e) { console.error("IG Error:", e); }
+}
+
+async function fetchFacebook(acc) {
+    try {
+        const url = `https://graph.facebook.com/v21.0/${acc.id}/videos?fields=title,description,created_time,views,likes.summary(true),comments.summary(true)&limit=12&access_token=${acc.key}`;
+        const res = await fetch(url).then(r => r.json());
+        (res.data || []).forEach(item => {
+            allVideosData.push({
+                Platform: 'Facebook',
+                Account: acc.name,
+                Title: (item.title || item.description || 'FB Video').substring(0, 40),
+                Date: item.created_time.slice(0, 10),
+                Views: item.views || 0,
+                Likes: item.likes?.summary?.total_count || 0,
+                Comments: item.comments?.summary?.total_count || 0
+            });
+        });
+    } catch (e) { console.error("FB Error:", e); }
+}
+
+function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.className = "tab-btn bg-gray-800 text-gray-300 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap";
+    });
+    const activeBtn = document.getElementById(`tab-${tab}`);
+    if (activeBtn) activeBtn.className = "tab-btn bg-indigo-600 text-white px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap";
+    renderActiveView();
+}
+
+function renderActiveView() {
+    const studioContainer = document.getElementById('studioScreensContainer');
+    const compareContainer = document.getElementById('compareContainer');
+
+    if (activeTab === 'compare') {
+        studioContainer.classList.add('hidden');
+        compareContainer.classList.remove('hidden');
+        renderComparison();
+        return;
+    }
+
+    compareContainer.classList.add('hidden');
+    studioContainer.classList.remove('hidden');
+
+    const platformsToShow = activeTab === 'swipe' ? ['Instagram', 'Facebook', 'YouTube'] : [activeTab];
+    studioContainer.innerHTML = platformsToShow.map(p => createPhoneScreenHTML(p)).join('');
+    platformsToShow.forEach(p => updatePlatformScreen(p, 'ALL'));
+}
+
+function createPhoneScreenHTML(platform) {
+    const meta = {
+        Instagram: { icon: '📸', color: 'text-pink-500' },
+        Facebook: { icon: '📘', color: 'text-blue-500' },
+        YouTube: { icon: '▶️', color: 'text-red-500' }
+    }[platform];
+
+    const platformData = allVideosData.filter(d => d.Platform === platform);
+    const channels = [...new Set(platformData.map(d => d.Account))];
+    const optionsHtml = [`<option value="ALL">📊 सभी ${platform} चैनल्स (${channels.length})</option>`]
+        .concat(channels.map(c => `<option value="${c}">📺 ${c}</option>`)).join('');
+
+    return `
+    <div class="phone-screen ${ activeTab !== 'swipe' ? '!flex-[0_0_100%]' : '' }">
+        <div class="flex justify-between items-center mb-3">
+            <h2 class="font-bold text-base ${meta.color}">${meta.icon} ${platform} Studio</h2>
+            <select onchange="updatePlatformScreen('${platform}', this.value)" class="bg-gray-800 text-xs rounded-lg px-2.5 py-1.5 border border-gray-700 max-w-[170px]">
+                ${optionsHtml}
+            </select>
+        </div>
+        <div class="grid grid-cols-3 gap-2 mb-4" id="metrics-${platform}"></div>
+        <div class="bg-gray-900/60 p-2.5 rounded-xl border border-gray-800 mb-4 h-44">
+            <canvas id="chart-${platform}"></canvas>
+        </div>
+        <h3 class="text-xs font-semibold text-gray-400 mb-2">🎬 अपलोड किए गए वीडियोज़ (Views & Likes):</h3>
+        <div class="overflow-y-auto max-h-64 space-y-2 pr-1" id="videos-${platform}"></div>
+    </div>`;
+}
+
+function updatePlatformScreen(platform, selectedChannel) {
+    let rows = allVideosData.filter(d => d.Platform === platform);
+    if (selectedChannel !== 'ALL') rows = rows.filter(d => d.Account === selectedChannel);
+
+    const totalViews = rows.reduce((s, r) => s + r.Views, 0);
+    const totalLikes = rows.reduce((s, r) => s + r.Likes, 0);
+    const totalComments = rows.reduce((s, r) => s + r.Comments, 0);
+
+    document.getElementById(`metrics-${platform}`).innerHTML = `
+        <div class="metric-box"><div class="text-[10px] text-gray-400">इस महीने के Views</div><div class="font-bold text-sm mt-0.5 text-white">👁️ ${totalViews.toLocaleString()}</div></div>
+        <div class="metric-box"><div class="text-[10px] text-gray-400">इस महीने के Likes</div><div class="font-bold text-sm mt-0.5 text-pink-400">❤️ ${totalLikes.toLocaleString()}</div></div>
+        <div class="metric-box"><div class="text-[10px] text-gray-400">Comments</div><div class="font-bold text-sm mt-0.5 text-blue-400">💬 ${totalComments.toLocaleString()}</div></div>
+    `;
+
+    const videosEl = document.getElementById(`videos-${platform}`);
+    if (rows.length === 0) {
+        videosEl.innerHTML = `<div class="text-xs text-gray-500 p-4 text-center">कोई डेटा नहीं मिला। ऊपर ⚙️ Settings से चैनल जोड़ें।</div>`;
+    } else {
+        videosEl.innerHTML = rows.sort((a,b) => b.Date.localeCompare(a.Date)).map(v => `
+            <div class="bg-gray-800/60 px-3 py-2 rounded-xl border border-gray-800 flex justify-between items-center text-xs">
+                <div class="truncate pr-2">
+                    <div class="font-medium text-gray-100 truncate">${v.Title}</div>
+                    <div class="text-[10px] text-gray-400">${v.Date} • <span class="text-indigo-400">${v.Account}</span></div>
+                </div>
+                <div class="text-right whitespace-nowrap">
+                    <div class="font-bold text-emerald-400">👁️ ${v.Views.toLocaleString()}</div>
+                    <div class="text-[10px] text-pink-400">❤️ ${v.Likes.toLocaleString()}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    const byDate = {};
+    rows.forEach(r => { byDate[r.Date] = (byDate[r.Date] || 0) + r.Views; });
+    const sortedDates = Object.keys(byDate).sort();
+
+    const ctx = document.getElementById(`chart-${platform}`).getContext('2d');
+    if (chartInstances[platform]) chartInstances[platform].destroy();
+
+    const lineColor = platform === 'Instagram' ? '#ec4899' : platform === 'Facebook' ? '#3b82f6' : '#ef4444';
+    chartInstances[platform] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: sortedDates.map(d => d.slice(5)),
+            datasets: [{
+                label: 'Daily Views',
+                data: sortedDates.map(d => byDate[d]),
+                borderColor: lineColor,
+                backgroundColor: lineColor + '22',
+                fill: true,
+                tension: 0.35
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#9ca3af', font: { size: 9 } }, grid: { display: false } },
+                y: { ticks: { color: '#9ca3af', font: { size: 9 } }, grid: { color: '#26293e' } }
+            }
+        }
+    });
+}
+
+function renderComparison() {
+    const groupKey = document.getElementById('compareGroupBy').value;
+    const summaryMap = {};
+
+    allVideosData.forEach(r => {
+        const key = r[groupKey];
+        if (!summaryMap[key]) summaryMap[key] = { Views: 0, Likes: 0, Comments: 0 };
+        summaryMap[key].Views += r.Views;
+        summaryMap[key].Likes += r.Likes;
+        summaryMap[key].Comments += r.Comments;
+    });
+
+    const entries = Object.entries(summaryMap).sort((a, b) => b[1].Views - a[1].Views);
+    if (entries.length > 0) {
+        document.getElementById('winnerBanner').innerHTML =
+            `🏆 <b>इस महीने सबसे ज़्यादा Views:</b> ${entries[0][0]} (${entries[0][1].Views.toLocaleString()} Views, ${entries[0][1].Likes.toLocaleString()} Likes)`;
+    }
+
+    document.getElementById('compareSummaryBody').innerHTML = entries.map(([name, st]) => `
+        <tr>
+            <td class="py-2 px-3 font-semibold text-white">${name}</td>
+            <td class="py-2 px-3 text-emerald-400 font-bold">${st.Views.toLocaleString()}</td>
+            <td class="py-2 px-3 text-pink-400">${st.Likes.toLocaleString()}</td>
+            <td class="py-2 px-3 text-blue-400">${st.Comments.toLocaleString()}</td>
+        </tr>
+    `).join('');
+
+    const ctx = document.getElementById('compareChartCanvas').getContext('2d');
+    if (chartInstances['compare']) chartInstances['compare'].destroy();
+    chartInstances['compare'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: entries.map(e => e[0]),
+            datasets: [
+                { label: 'Total Views', data: entries.map(e => e[1].Views), backgroundColor: '#6366f1' },
+                { label: 'Total Likes', data: entries.map(e => e[1].Likes), backgroundColor: '#ec4899' }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { ticks: { color: '#cbd5e1', font: { size: 10 } } },
+                y: { ticks: { color: '#cbd5e1', font: { size: 10 } }, grid: { color: '#26293e' } }
+            }
+        }
+    });
+
+    const groups = entries.map(e => e[0]);
+    const dateMatrix = {};
+    allVideosData.forEach(r => {
+        if (!dateMatrix[r.Date]) dateMatrix[r.Date] = {};
+        dateMatrix[r.Date][r[groupKey]] = (dateMatrix[r.Date][r[groupKey]] || 0) + r.Views;
+    });
+
+    document.getElementById('dailyWinnerHead').innerHTML = `
+        <tr>
+            <th class="py-2 px-2">तारीख (Date)</th>
+            ${groups.map(g => `<th class="py-2 px-2">${g}</th>`).join('')}
+            <th class="py-2 px-2 text-amber-400">🏆 विजेता</th>
+        </tr>
+    `;
+
+    const sortedDates = Object.keys(dateMatrix).sort().reverse();
+    document.getElementById('dailyWinnerBody').innerHTML = sortedDates.map(d => {
+        let maxV = -1, winner = '-';
+        const cells = groups.map(g => {
+            const v = dateMatrix[d][g] || 0;
+            if (v > maxV) { maxV = v; winner = g; }
+            return `<td class="py-2 px-2">${v.toLocaleString()}</td>`;
+        }).join('');
+        return `<tr><td class="py-2 px-2 text-gray-400">${d}</td>${cells}<td class="py-2 px-2 font-bold text-amber-400">${winner}</td></tr>`;
+    }).join('');
+}
+
+loadAllData();
+
+// Service Worker Registration
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('SW Registered:', reg.scope))
+            .catch(err => console.log('SW Error:', err));
+    });
+}
+</script>
+</body>
+</html>
