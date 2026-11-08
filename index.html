@@ -54,7 +54,7 @@
             <span class="text-2xl">📊</span>
             <div>
                 <h1 class="font-bold text-lg leading-tight">Creator Studio Pro</h1>
-                <p class="text-xs text-gray-400">IG • FB • YT Login & Multi-API</p>
+                <p class="text-xs text-gray-400">IG • FB • YT JSON & Multi-API</p>
             </div>
         </div>
         <div class="flex items-center gap-2">
@@ -63,7 +63,7 @@
                 <span>Demo</span>
             </label>
             <button onclick="toggleSettings()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-xl text-sm font-medium flex items-center gap-1 shadow">
-                🔐 Login / API
+                🔐 Login / JSON
             </button>
         </div>
     </header>
@@ -77,25 +77,24 @@
         <button onclick="switchTab('compare')" id="tab-compare" class="tab-btn bg-emerald-700 text-white px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap">⚖️ कंबाइन तुलना (Compare All)</button>
     </div>
 
-    <!-- ⚙️ SETTINGS & OAUTH LOGIN DRAWER -->
+    <!-- ⚙️ SETTINGS, JSON UPLOAD & OAUTH DRAWER -->
     <div id="settingsModal" class="fixed inset-0 bg-black/80 z-50 hidden flex justify-end">
         <div class="bg-[#181924] w-full max-w-md h-full overflow-y-auto p-5 border-l border-gray-700">
             <div class="flex justify-between items-center pb-3 border-b border-gray-700">
-                <h2 class="text-lg font-bold">🔐 अकाउंट लॉगिन & Multi-API</h2>
+                <h2 class="text-lg font-bold">🔐 JSON अपलोड, लॉगिन & Multi-API</h2>
                 <button onclick="toggleSettings()" class="text-gray-400 hover:text-white text-xl">✖</button>
             </div>
 
-            <!-- 🔑 OAUTH CLIENT ID SETUP (One-Time Setup for Login Buttons) -->
+            <!-- 🔑 OAUTH CLIENT ID SETUP -->
             <div class="bg-indigo-950/40 border border-indigo-800/70 rounded-xl p-3.5 mt-4 mb-5">
-                <div class="text-xs font-bold text-indigo-300 mb-2">⚡ One-Click Login सेटअप (OAuth Client ID):</div>
+                <div class="text-xs font-bold text-indigo-300 mb-2">⚡ One-Click Login सेटअप (या नीचे सीधे JSON अपलोड करें):</div>
                 <div class="space-y-2">
-                    <input id="googleClientId" type="text" placeholder="Google OAuth Client ID (YouTube Login के लिए)" class="w-full bg-gray-900 text-xs px-3 py-2 rounded-lg border border-gray-700">
+                    <input id="googleClientId" type="text" placeholder="Google OAuth Client ID (JSON अपलोड करने पर खुद भर जाएगा)" class="w-full bg-gray-900 text-xs px-3 py-2 rounded-lg border border-gray-700">
                     <input id="fbAppId" type="text" placeholder="Meta/Facebook App ID (FB & IG Login के लिए)" class="w-full bg-gray-900 text-xs px-3 py-2 rounded-lg border border-gray-700">
                     <button onclick="saveOAuthConfig()" class="w-full bg-indigo-700 hover:bg-indigo-600 text-white text-xs font-semibold py-1.5 rounded-lg">
                         💾 Login IDs सेव करें
                     </button>
                 </div>
-                <p class="text-[11px] text-gray-400 mt-2">नोट: Client ID सेव करने के बाद नीचे दिए गए <b>Login</b> बटन से आप जितने चाहें उतने YouTube/FB/IG अकाउंट्स लॉग इन करके जोड़ सकते हैं।</p>
             </div>
 
             <!-- Dynamic Account Sections for YT, IG, FB -->
@@ -151,7 +150,7 @@
     </main>
 
 <script>
-const STORAGE_KEY = "multi_creator_studio_v2";
+const STORAGE_KEY = "multi_creator_studio_v3";
 let appState = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
     useDemo: true,
     oauth: { googleClientId: "", fbAppId: "" },
@@ -182,7 +181,7 @@ function saveOAuthConfig() {
         fbAppId: document.getElementById('fbAppId').value.trim()
     };
     saveState();
-    alert("Login Client IDs सेव हो गईं! अब आप Login बटन दबाकर सीधे चैनल जोड़ सकते हैं।");
+    alert("Login Client IDs सेव हो गईं!");
 }
 
 function toggleDemoMode() {
@@ -192,46 +191,123 @@ function toggleDemoMode() {
 }
 
 // =====================================================
+// 📂 YOUTUBE JSON FILE UPLOAD HANDLER
+// =====================================================
+function handleYouTubeJsonUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const json = JSON.parse(e.target.result);
+
+            // Case 1: Google Cloud Console की 'client_secret_...json' फाइल (web या installed)
+            const oauthObj = json.web || json.installed;
+            if (oauthObj && oauthObj.client_id) {
+                appState.oauth.googleClientId = oauthObj.client_id;
+                document.getElementById('googleClientId').value = oauthObj.client_id;
+                saveState();
+                alert("✅ JSON फाइल से Google Client ID मिल गई! अब लॉगिन पॉपअप खुल रहा है, अपना YouTube अकाउंट चुनें...");
+                loginWithYouTube(oauthObj.client_id);
+                return;
+            }
+
+            // Case 2: अगर JSON में पहले से access_token या api_key/channel_id सेव है
+            if (json.access_token || json.token) {
+                const token = json.access_token || json.token;
+                await addYouTubeChannelFromToken(token, file.name.replace('.json', ''));
+                return;
+            }
+
+            if (json.api_key && json.channel_id) {
+                appState.accounts.YouTube.push({
+                    name: json.name || "YT JSON Channel",
+                    id: json.channel_id,
+                    key: json.api_key,
+                    authType: "apiKey"
+                });
+                appState.useDemo = false;
+                saveState();
+                renderSettingsDrawer();
+                loadAllData();
+                alert("✅ JSON फाइल से YouTube चैनल सीधे जुड़ गया!");
+                return;
+            }
+
+            // Case 3: अगर JSON में एक साथ कई अकाउंट्स की लिस्ट है
+            if (Array.isArray(json)) {
+                json.forEach(item => {
+                    if (item.id && item.key) {
+                        appState.accounts.YouTube.push({
+                            name: item.name || "YT Channel",
+                            id: item.id,
+                            key: item.key,
+                            authType: item.authType || "apiKey"
+                        });
+                    }
+                });
+                appState.useDemo = false;
+                saveState();
+                renderSettingsDrawer();
+                loadAllData();
+                alert("✅ JSON फाइल से सभी YouTube चैनल्स जुड़ गए!");
+                return;
+            }
+
+            alert("⚠️ इस JSON फाइल में 'client_id' या YouTube क्रेडेंशियल नहीं मिले। कृपया Google Cloud से डाउनलोड की गई सही OAuth JSON फाइल चुनें।");
+        } catch (err) {
+            alert("❌ JSON फाइल पढ़ने में त्रुटि: " + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+async function addYouTubeChannelFromToken(accessToken, fallbackName = "YT OAuth") {
+    try {
+        const res = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        }).then(r => r.json());
+
+        if (res.items && res.items.length > 0) {
+            res.items.forEach(ch => {
+                appState.accounts.YouTube.push({
+                    name: ch.snippet.title + " (JSON/Login)",
+                    id: ch.id,
+                    key: accessToken,
+                    authType: "oauth"
+                });
+            });
+            appState.useDemo = false;
+            saveState();
+            renderSettingsDrawer();
+            loadAllData();
+            alert(`✅ YouTube चैनल "${res.items[0].snippet.title}" सफलतापूर्वक जुड़ गया!`);
+        } else {
+            alert("इस Google अकाउंट पर कोई YouTube चैनल नहीं मिला।");
+        }
+    } catch (err) {
+        alert("YouTube डेटा लाने में त्रुटि: " + err.message);
+    }
+}
+
+// =====================================================
 // 🔐 GOOGLE (YOUTUBE) & FACEBOOK/INSTAGRAM OAUTH LOGIN
 // =====================================================
-function loginWithYouTube() {
-    const clientId = appState.oauth?.googleClientId || document.getElementById('googleClientId').value.trim();
+function loginWithYouTube(customClientId) {
+    const clientId = customClientId || appState.oauth?.googleClientId || document.getElementById('googleClientId').value.trim();
     if (!clientId) {
-        alert("कृपया पहले ऊपर बॉक्स में 'Google OAuth Client ID' डालें या नीचे मैनुअल तरीके से API Key व Channel ID डालें!");
+        alert("कृपया पहले '📂 YouTube JSON फाइल अपलोड करें' बटन से अपनी client_secret.json फाइल चुनें!");
         return;
     }
 
     const tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: 'https://www.googleapis.com/auth/youtube.readonly',
-        prompt: 'select_account', // हर बार नया Gmail/YouTube चैनल चुनने देगा
+        prompt: 'select_account',
         callback: async (tokenResponse) => {
             if (tokenResponse && tokenResponse.access_token) {
-                try {
-                    const res = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true', {
-                        headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
-                    }).then(r => r.json());
-
-                    if (res.items && res.items.length > 0) {
-                        res.items.forEach(ch => {
-                            appState.accounts.YouTube.push({
-                                name: ch.snippet.title + " (OAuth)",
-                                id: ch.id,
-                                key: tokenResponse.access_token,
-                                authType: "oauth"
-                            });
-                        });
-                        appState.useDemo = false;
-                        saveState();
-                        renderSettingsDrawer();
-                        loadAllData();
-                        alert(`✅ YouTube चैनल "${res.items[0].snippet.title}" सफलतापूर्वक लॉगिन और सेव हो गया!`);
-                    } else {
-                        alert("इस Google अकाउंट पर कोई YouTube चैनल नहीं मिला।");
-                    }
-                } catch (err) {
-                    alert("YouTube Login Error: " + err.message);
-                }
+                await addYouTubeChannelFromToken(tokenResponse.access_token);
             }
         }
     });
@@ -250,7 +326,6 @@ function loginWithMeta(platform) {
     window.location.href = authUrl;
 }
 
-// URL से Facebook/Instagram OAuth Token पकड़ना (अगर रिडायरेक्ट होकर आया है)
 async function checkMetaOAuthRedirect() {
     if (window.location.hash.includes("access_token=")) {
         const params = new URLSearchParams(window.location.hash.substring(1));
@@ -276,7 +351,7 @@ async function checkMetaOAuthRedirect() {
                     });
                     appState.useDemo = false;
                     saveState();
-                    alert(`✅ Facebook और जुड़े हुए Instagram पेज सफलतापूर्वक लॉगिन और सेव हो गए!`);
+                    alert(`✅ Facebook और Instagram पेज सफलतापूर्वक लॉगिन और सेव हो गए!`);
                 }
             } catch (e) { console.error(e); }
         }
@@ -284,7 +359,7 @@ async function checkMetaOAuthRedirect() {
 }
 
 // =====================================================
-// ⚙️ SETTINGS DRAWER RENDERER (Login + Manual Add)
+// ⚙️ SETTINGS DRAWER RENDERER (JSON Upload + Login + Manual)
 // =====================================================
 function renderSettingsDrawer() {
     const container = document.getElementById('apiManagerContainer');
@@ -292,23 +367,34 @@ function renderSettingsDrawer() {
         {
             name: 'YouTube', icon: '▶️', color: 'text-red-500',
             idLabel: 'YouTube Channel ID (जैसे: UC...)', keyLabel: 'YouTube Data API v3 Key',
-            loginBtn: `<button onclick="loginWithYouTube()" class="w-full bg-red-600 hover:bg-red-500 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow mb-3">
-                        🔐 Google से Login करके YouTube चैनल जोड़ें
-                       </button>`
+            extraActions: `
+                <!-- 📂 Upload YouTube JSON Button -->
+                <label class="w-full bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow mb-2 cursor-pointer">
+                    📂 YouTube JSON फाइल अपलोड करें (Add Channel)
+                    <input type="file" accept=".json,application/json" onchange="handleYouTubeJsonUpload(event)" class="hidden">
+                </label>
+                <button onclick="loginWithYouTube()" class="w-full bg-red-600 hover:bg-red-500 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow mb-3">
+                    🔐 Google से Login करके दूसरा चैनल जोड़ें
+                </button>
+            `
         },
-        {
+                {
             name: 'Instagram', icon: '📸', color: 'text-pink-500',
             idLabel: 'IG Business Account ID', keyLabel: 'Instagram Access Token',
-            loginBtn: `<button onclick="loginWithMeta('Instagram')" class="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:opacity-95 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow mb-3">
-                        🔐 Facebook/IG से Login करके अकाउंट जोड़ें
-                       </button>`
+            extraActions: `
+                <button onclick="loginWithMeta('Instagram')" class="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:opacity-95 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow mb-3">
+                    🔐 Facebook/IG से Login करके अकाउंट जोड़ें
+                </button>
+            `
         },
         {
             name: 'Facebook', icon: '📘', color: 'text-blue-500',
             idLabel: 'FB Page ID', keyLabel: 'FB Page Access Token',
-            loginBtn: `<button onclick="loginWithMeta('Facebook')" class="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow mb-3">
-                        🔐 Facebook से Login करके Page जोड़ें
-                       </button>`
+            extraActions: `
+                <button onclick="loginWithMeta('Facebook')" class="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow mb-3">
+                    🔐 Facebook से Login करके Page जोड़ें
+                </button>
+            `
         }
     ];
 
@@ -332,8 +418,7 @@ function renderSettingsDrawer() {
             ${savedHtml}
             
             <div class="mt-3 pt-3 border-t border-gray-800">
-                <!-- Direct OAuth Login Button -->
-                ${p.loginBtn}
+                ${p.extraActions}
 
                 <!-- Manual API Input Option -->
                 <details class="text-xs">
@@ -561,7 +646,7 @@ function updatePlatformScreen(platform, selectedChannel) {
 
     const videosEl = document.getElementById(`videos-${platform}`);
     if (rows.length === 0) {
-        videosEl.innerHTML = `<div class="text-xs text-gray-500 p-4 text-center">कोई डेटा नहीं मिला। ऊपर 🔐 Login / API से चैनल लॉगिन करें।</div>`;
+        videosEl.innerHTML = `<div class="text-xs text-gray-500 p-4 text-center">कोई डेटा नहीं मिला। ऊपर 🔐 Login / JSON से चैनल जोड़ें।</div>`;
     } else {
         videosEl.innerHTML = rows.sort((a,b) => b.Date.localeCompare(a.Date)).map(v => `
             <div class="bg-gray-800/60 px-3 py-2 rounded-xl border border-gray-800 flex justify-between items-center text-xs">
@@ -695,3 +780,40 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
+        {
+            name: 'Instagram', icon: '📸', color: 'text-pink-500',
+            idLabel: 'IG Business Account ID', keyLabel: 'Instagram Access Token',
+            extraActions: `
+                <button onclick="loginWithMeta('Instagram')" class="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:opacity-95 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow mb-3">
+                    🔐 Facebook/IG से Login करके अकाउंट जोड़ें
+                </button>
+            `
+        },
+        {
+            name: 'Facebook', icon: '📘', color: 'text-blue-500',
+            idLabel: 'FB Page ID', keyLabel: 'FB Page Access Token',
+            extraActions: `
+                <button onclick="loginWithMeta('Facebook')" class="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow mb-3">
+                    🔐 Facebook से Login करके Page जोड़ें
+                </button>
+            `
+        }
+    ];
+
+    container.innerHTML = platforms.map(p => {
+        const savedList = appState.accounts[p.name] || [];
+        const savedHtml = savedList.length > 0
+            ? savedList.map((acc, i) => `
+                <div class="flex justify-between items-center bg-gray-800/80 px-3 py-2 rounded-lg border-l-4 border-emerald-500 text-xs mb-2">
+                    <div>
+                        <div class="font-bold text-white">${acc.name}</div>
+                        <div class="text-gray-400">ID: ${acc.id.substring(0, 14)}...</div>
+                    </div>
+                    <button onclick="deleteAccount('${p.name}', ${i})" class="text-red-400 hover:text-red-300 px-2 py-1">🗑️</button>
+                </div>
+            `).join('')
+            : `<div class="text-xs text-gray-500 italic mb-2">अभी कोई ${p.name} चैनल सेव नहीं है।</div>`;
+
+        return `
+        <div class="bg-gray-900/90 p-3.5 rounded-xl border border-gray-800">
+            <h3 class="font-bold text-sm ${p.color} mb-2">${p.icon} ${p.name} चैनल्स (${savedList.length} जुड़े है
